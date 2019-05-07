@@ -3,6 +3,8 @@ import subprocess
 import sys
 import os
 from multiprocessing import Pool
+import matplotlib.pyplot as plt
+import numpy as np
 
 pos_file = ""
 neg_file = ""
@@ -21,8 +23,7 @@ def wigCorrelate(shift):
     command = "wiggletools write %s shiftPos %s %s;../../wigCorrelate %s %s;rm %s" % (tmpfile, str(shift), neg_file, pos_file, tmpfile, tmpfile)
     p = subprocess.Popen(command, stdout = subprocess.PIPE, stderr = subprocess.STDOUT, shell = True)
     out, err = p.communicate()
-    print(out.split("\t"))
-    return float(out.split("\t")[2].rstrip())
+    return shift, float(out.split("\t")[2].rstrip())
 
 def pearson_masc(shift):
     print("Processing %d" % shift)
@@ -49,15 +50,22 @@ if __name__ == '__main__':
     pool = Pool(processes = args.cores)
     if args.masc:
         print("MaSC set.")
-        pearson_vals = pool.map(pearson_masc, range(args.initial, args.end + args.step, args.step))
+        pearson_vals = array(pool.map(pearson_masc, range(args.initial, args.end + args.step, args.step)))
     elif args.wigCorrelate:
         print("wigCorrelate set.")
-        pearson_vals = pool.map(wigCorrelate, range(args.initial, args.end + args.step, args.step))
+        pearson_vals = array(pool.map(wigCorrelate, range(args.initial, args.end + args.step, args.step)))
     else:
         print("Wiggletools set.")
-        pearson_vals = pool.map(pearson, range(args.initial, args.end + args.step, args.step))
-    print("Max pearson value: %2.6f\n" % (max(pearson_vals)))
-    print("Corresponding shift: %d\n" % (pearson_vals.index(max(pearson_vals)) + 1))
-    for i, val in enumerate(pearson_vals, start = 1):
-        out_file.write("%d\t%2.6f\n" % (i, val))
+        pearson_vals = array(pool.map(pearson, range(args.initial, args.end + args.step, args.step)))
+    maxIn, maxPearson = np.amax(pearson_vals, axis = 0)
+    maxShift = pearson_vals[np.where(pearson_vals[, 1] == maxPearson), 0]
+    print("Max pearson value: %2.6f\n" % (maxPearson)
+    print("Corresponding shift: %d\n" % maxShift)
+    np.savetxt(out_file, pearson_vals, fmt = "%d\t%2.6f", newline = "\n")
+    plt.plot(pearson_vals)
+    plt.ylabel("Correlation values")
+    plt.xlabel("Shift values")
+    plt.annotate("Max shift: %d" % maxShift, xy = (maxShift, maxPearson), xytext = (maxShift, maxPearson + 0.1),
+                  arrowprops = dict(facecolor = "black", shrink = 0.03))
+    plt.savefig("%s.pdf" % args.out, format = "pdf")
     out_file.close()
