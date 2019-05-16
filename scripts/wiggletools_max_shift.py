@@ -9,13 +9,18 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 
-pos_file = ""
-neg_file = ""
+def running_mean(x, N):
+    cumsum = np.cumsum(np.insert(x, 0, 0))
+    return (cumsum[N:] - cumsum[:-N]) / float(N)
+
+def runningMeanFast(x, N):
+    return np.convolve(x, np.ones((N,))/N)[(N-1):]
 
 def pearson(shift):
-    print("Processing %d" % shift)
-    p = subprocess.Popen(["wiggletools", "pearson", pos_file, "shiftPos", str(shift), neg_file],
-                         stdout = subprocess.PIPE, stderr = subprocess.STDOUT)
+    print("Processing %d strictly" % shift)
+    p = subprocess.Popen(["wiggletools", "pearson", "strict", pos_file, "shiftPos", str(shift), neg_file],
+                     stdout = subprocess.PIPE, stderr = subprocess.STDOUT)
+
     out, err = p.communicate()
     return shift, float(out.rstrip())
 
@@ -33,7 +38,7 @@ def accurate(shift):
     print("Processing %d" % shift)
     tmpfile = "/scratch/joshjayk/shift%d.wig" % shift
     map_shift = 36 - shift
-    command = "wiggletools write %s overlaps ../mappability/filtered_mus_musculus_all_chrom.map.wig shiftPos %s ../mappability/filtered_mus_musculus_all_chrom.map.wig;wiggletools pearson overlaps %s shiftPos %s %s overlaps %s %s" % (tmpfile, str(map_shift), tmpfile, str(shift), neg_file, tmpfile, pos_file)
+    command = "wiggletools write %s overlaps %s shiftPos %s ../mappability/filtered_mus_musculus_all_chrom.map.wig;wiggletools pearson overlaps %s shiftPos %s %s overlaps %s %s" % (tmpfile, str(map_shift), map_file, tmpfile, str(shift), neg_file, tmpfile, pos_file)
     p = subprocess.Popen(command, stdout = subprocess.PIPE, stderr = subprocess.STDOUT, shell = True)
     out, err = p.communicate()
     return shift, float(out.rstrip())
@@ -47,7 +52,7 @@ def pearson_masc(shift):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description = "Calculate pearson correlation values for various shift lengths.")
     parser.add_argument("-c", "--cores", type = int, default = 1, help = "The number of cores to parallelize with.")
-    parser.add_argument("-i", "--initial", type = int, default = 1, help = "The initial shift value to calculate.")
+    parser.add_argument("-i", "--initial", type = int, default = 0, help = "The initial shift value to calculate.")
     parser.add_argument("-e", "--end", type = int, default = 400, help = "The final shift value to calculate.")
     parser.add_argument("-s", "--step", type = int, default = 1, help = "The step size for shift values.")
     parser.add_argument("-m", "--masc", action = "store_true", help = "Use MaSC formula for calculating neg strand coverage.")
@@ -56,9 +61,14 @@ if __name__ == '__main__':
     parser.add_argument("-p", "--pos", type = str, help = "The name of the positive strand file.", required = True)
     parser.add_argument("-n", "--neg", type = str, help = "The name of the negative strand file.", required = True)
     parser.add_argument("-o", "--out", type = str, help = "The name of the file to save to.", required = True)
+    parser.add_argument("-d", "--mapdir", type = str, help = "The relative path to the mappability file. Required for accurate.")
     args = parser.parse_args()
+    global pos_file
+    global neg_file
+    global map_file
     pos_file = args.pos
     neg_file = args.neg
+    map_file = args.mapdir
     out_file = open(args.out, "w+")
     out_file.write("Shift\tValue\n")
     pool = Pool(processes = args.cores)
@@ -70,19 +80,23 @@ if __name__ == '__main__':
         pearson_vals = np.array(pool.map(wigCorrelate, range(args.initial, args.end + args.step, args.step)))
     elif args.accurate:
         print("New method.")
+        if not map_file:
+            print("Set mappability directory.")
+            exit()
         pearson_vals = np.array(pool.map(accurate, range(args.initial, args.end + args.step, args.step)))
     else:
         print("Wiggletools set.")
         pearson_vals = np.array(pool.map(pearson, range(args.initial, args.end + args.step, args.step)))
-    maxPearson = np.amax(pearson_vals, axis = 0)[1]
+    # smoothed = running_mean(pearson_vals[:, 1], (int)(0.1*(args.end - args.initial)))
+    maxPearson = np.nanmax(pearson_vals, axis = 0)[1]
     maxShift = pearson_vals[np.where(pearson_vals[:, 1] == maxPearson), 0]
     print("Max pearson value: %2.6f\n" % maxPearson)
     print("Corresponding shift: %d\n" % maxShift)
     np.savetxt(out_file, pearson_vals, fmt = "%d\t%2.6f", newline = "\n")
-    plt.plot(pearson_vals[:, 0], pearson_vals[:, 1], 'bo')
+    plt.plot(pearson_vals[:, 0], pearson_vals[:, 1], 'bo', markersize = 2)
     plt.ylabel("Correlation values")
     plt.xlabel("Shift values")
     plt.annotate("Max shift: %d" % maxShift, xy = (maxShift, maxPearson), xytext = (maxShift, maxPearson + 0.1),
-                  arrowprops = dict(facecolor = "black", shrink = 0.1))
+                  arrowprops = dict(facecolor = "black", shrink = 0.1, width = 2))
     plt.savefig("%s.pdf" % args.out, format = "pdf")
     out_file.close()
