@@ -66,7 +66,7 @@ if __name__ == '__main__':
         prev = -1
         for i in sorted(results[chr]):
             # Write to output if unique.
-            if i[0] == prev:
+            if i[0] != prev:
                 out_file.write("%s\t%d\t%d\t%1.2f\t%1.2f\t%1.2f\n" % (chr, i[0], i[0] + i[1], i[2], i[3], i[4]))
             prev = i[0]
     out_file.close()
