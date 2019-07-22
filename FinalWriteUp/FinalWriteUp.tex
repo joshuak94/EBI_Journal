@@ -46,8 +46,8 @@
   \newpage
   \section{Summary}
   This report summarizes the three months I spent at EMBL-EBI in Hinxton, UK, where the primary focus of my work was
-  designing a more efficient reimplementation of the ENCODE ChIP-seq signal normalization pipeline, known as
-  align2rawsignal \cite{hoffman_integrative_2013}. In short, align2rawsignal is a tool used to
+  designing a more efficient implementation of the ENCODE ChIP-seq signal normalization pipeline, known as
+  align2rawsignal \cite{hoffman_integrative_2013}. In short, align2rawsignal is a tool written by Anshul Kundaje used to
   normalize data generated from ChIP-seq based on a variety of criteria, including mappability of the genome, sequencing depth,
   and replicates. Further, the signal track generated differentiates between regions in the sequence which have no
   read coverage (denoted by a $0$ signal value), and regions which have no signal due because they lie in unmappable areas
@@ -83,11 +83,11 @@
     The key information with the sequencing step is that the entire fragment is often not sequenced. From a 300 base pair
     fragment, it is possible, and common, that only 75-100 base pairs from either end will be sequenced. Thus, instead
     of seeing reads aligning to where the fragment lies in the genome, you will see reads aligning to the start and end
-    of the fragment, with the center lacking coverage.
+    of the fragment, with the center of the fragment lacking coverage.
 
     ATAC-seq and DNase-seq are two other common techniques. They are similar to one another in that they probe the entire
     genome looking for open regions, or regions potentially accessible by proteins. However, ATAC-seq is much more relevant
-    as it required significantly less time and significantly fewer cells \cite{buenrostro_transposition_2013}. The difference between these techniques
+    as it requires significantly less time and significantly fewer cells \cite{buenrostro_transposition_2013}. The difference between these techniques
     and ChIP-seq is that these show all available locations in the genome, whereas ChIP-seq will show all locations which
     a specific protein has bound to.
 
@@ -99,15 +99,15 @@
 
     \subsection{Mappability}
     One final important concept is the mappability of a genome. Mappability is defined as a measure of how often a
-    specific sequence with read length $k$ occurs in the given genome. If the sequence is unique, it is given a mappability
-    of $1$, and this value approaches $0$ the more the sequence occurs in the genome. Thus, for a given $k$ and genome,
+    specific sequence with length $k$ occurs in the given genome. If the sequence is unique, it is given a mappability
+    of $1$, and this value approaches $0$ the more frequently the sequence occurs in the genome. Thus, for a given $k$ and genome,
     one can iterate through the entire genome base by base, and determine the mappability value of the $k$-mer at each
     position. From there, one could obtain a binary mappability track by only keeping positions with values of $1$, or
     completely unique positions, and setting all other values less than $1$ to $0$. Knowing the mappability of a genome
     can be useful for e.g. preprocessing a fasta file to select only mappable reads.
 
     In this application, the mappability will be used in two ways. The first way will be in the fragment length calculations,
-    where the mappability is used to mask the coverage values to regions that are completely mappable. This improves
+    where the mappability is used to filter the coverage values to regions that are completely mappable. This improves
     the accuracy of the fragment length calculation primarily by reducing noise and bias. Ramachandran, et. al showed
     that differences in mappability can introduce an artificial bias into the fragment length calculation, and by masking
     the reads for mappability, this bias can be corrected for \cite{ramachandran_masc:_2013}. The second usage of the mappability is at the
@@ -119,7 +119,7 @@
   Here I will discuss the methods of the previous pipeline, along with any motivation for switching to another pipeline.
 
     \subsection{Umap}
-    Umap is a tool developed originally by Anshul Kundaje. The original script was written in MATLAB, but was no longer
+    Umap is a tool developed originally by Anshul Kundaje. The original script was written in MATLAB, but is no longer
     publicly available. Mehran Karimzadeh then reimplemented Umap using Python in 2016, adding some new features such as
     calculating the mappability of the bisulfite-converted genome \cite{karimzadeh_umap_2018}. Umap in its essence is
     comprised of 3 steps. For a given $k$ value, it will
@@ -146,7 +146,7 @@
       \item A weighted sum of read counts is calculated using a Tukey kernel of width $w$, centered at each position $x$.
             This weighted sum $F(x)$ represents the approximate number of sequenced fragments overlapping any position $x$.
       \item The fragment counts from both strands are added together.
-      \item Steps 1. through 3. are then repeated for a binary mappability track with the same read length, to generate the
+      \item Steps 1. through 3. are then repeated for the binary mappability track with the same read length, to generate the
             local cumulative mappability ($M(x)$). $M(x)$ indicates the number of positions around $x$ which can potentially
             contribute read counts based on mappability.
       \item An expected fragment count track is then calculated using the following formula:
@@ -175,7 +175,7 @@
     \subsection{GenMap}
     GenMap is a tool written in C++ using the SeqAn library \cite{pockrandt_genmap:_2019}. The principle ideas of GenMap are the same as with Umap:
     to calculate the mappability for a given length $k$ at each position in the genome. However, GenMap is more efficient than
-    Umap by several orders of magnitude. This is primarily due to a few intelligent choices made in GenMap.
+    Umap by several orders of magnitude. This is primarily due to a few intelligent choices made in GenMap:
     \begin{enumerate}
       \item The first choice was to use an EPR dictionary, which is an implementation of a bidirectional FM index.
             This is an alternative to the index used in the Bowtie aligner, which is a unidirectional FM index based on
@@ -190,17 +190,18 @@
             a $k$-mer, all occurrences of that $k$-mer in the text will have its mappability value filled in. Then, when
             that position is encountered later on, it can already be skipped.
     \end{enumerate}
-    By utilizing these improvements, GenMap is able to reduce the runtime from 30 minutes on 400 cores to ~2.5 minutes on
-    16 cores. Additionally, it does not depend on any specific clustering software.
+    By utilizing these improvements, GenMap is able to achieve a runtime of ~2.5 minutes on
+    16 cores, as opposed to 30 minutes on 400 cores with Umap. Additionally, it does not depend on any specific clustering software
 
     \subsection{WiggleTools}
     WiggleTools is another tool written in C++. There are many different functions included within WiggleTools which are
     used to manipulate and calculate statistics on coverage data. Its main benefit is that it streams in data from input files and then
     immediately performs online calculations and streams its output, requiring very little memory overhead. For comparison,
     align2rawsignal loads chunks of the input files into memory, splitting the file by default into 20 chunks. Additionally,
-    it doesn't require the MATLAB runtime library.
+    WiggleTools doesn't require the MATLAB runtime library, and just requires a default GNU compiler.
     One other advantage WiggleTools provides is its ability to use standard filetypes as input and output formats. It relies on the
-    htslib and libBigWig libraries. This is crucial because indexed binary files, such as BigWig and BAM files, provide
+    HTSlib and libBigWig libraries, which are standard libraries used for input and output of sequencing data.
+    This is crucial because indexed binary files, such as BigWig and BAM files, provide
     significantly quicker access to the data stored in them.
 
   \section{Methods}
@@ -211,7 +212,7 @@
     The key part of the code is line 4, where \verb$wiggletools pearson$ is called. In this line, the pearson correlation
     values are calculated between the positive and negative strands, where only values in \textit{dual strand mappable}
     regions are used for the calculation. \textit{Dual strand mappability} is defined as regions where a read mapping to
-    position $x$ on the positive strand, and position $x + shift$ on the negative strand are both mappable. This is in contrast
+    position $x$ on the positive strand, and position $x + shift$ on the negative strand, are both mappable. This is in contrast
     to the call on line 7, where a naive pearson correlation is calculated without any regard for mappability. The technique
     of filtering to only dual mappable regions is adapted from MaSC \cite{ramachandran_masc:_2013}, and does well to reduce artefacts introduced
     by noise and random data. However, I found that this was not enough, and resulted in the very first points, corresponding
@@ -222,7 +223,7 @@
     \lstinputlisting[language = Python, firstline = 88, lastline = 94]{../scripts/wiggletoolsSigNorm.py}
     This is a reasonable assumption to make, as there are two possible scenarios:
     \begin{enumerate}
-      \item The max value is always the left-most shift value. This means the trend is a constant negative slope, and
+      \item The max value is always the smallest shift value. This means the trend is a constant negative slope, and
             there is likely some sort of error in the read data.
       \item The max value will eventually jump to another value which is not the left-most shift value. This is much
             more likely to be the true shift value.
