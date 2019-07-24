@@ -15,29 +15,28 @@
 \definecolor{backcolour}{rgb}{0.95,0.95,0.92}
 
 \lstdefinestyle{mystyle}{
-    backgroundcolor=\color{backcolour},
-    commentstyle=\color{codegreen},
-    keywordstyle=\color{magenta},
-    numberstyle=\tiny\color{codegray},
-    stringstyle=\color{codepurple},
-    basicstyle=\ttfamily\footnotesize,
-    breakatwhitespace=false,
-    breaklines=true,
-    captionpos=b,
-    keepspaces=true,
-    numbers=left,
-    numbersep=5pt,
-    showspaces=false,
-    showstringspaces=false,
-    showtabs=false,
-    tabsize=2
+  backgroundcolor=\color{backcolour},
+  commentstyle=\color{codegreen},
+  keywordstyle=\color{magenta},
+  numberstyle=\tiny\color{codegray},
+  stringstyle=\color{codepurple},
+  basicstyle=\ttfamily\footnotesize,
+  breakatwhitespace=false,
+  breaklines=true,
+  captionpos=b,
+  keepspaces=true,
+  numbers=left,
+  numbersep=5pt,
+  showspaces=false,
+  showstringspaces=false,
+  showtabs=false,
+  tabsize=2
 }
 
 \lstset{style=mystyle}
-\graphicspath{{images/}}
 
 \title{Improving on the ENCODE ChIP-seq normalization pipeline}
-\author{Joshua Kim}
+\author{Joshua Kim\thanks{joshua.kim@fu-berlin.de}\\EMBL-EBI Hinxton, UK}
 
 \begin{document}
   \maketitle
@@ -208,7 +207,9 @@
 
     \subsection{Fragment length estimation}
     The fragment lengths were estimated using pearson correlation values as a measurement:
+
     \lstinputlisting[language = Python, firstline = 69, lastline = 75]{../scripts/wiggletoolsSigNorm.py}
+
     The key part of the code is line 4, where \verb$wiggletools pearson$ is called. In this line, the pearson correlation
     values are calculated between the positive and negative strands, where only values in \textit{dual strand mappable}
     regions are used for the calculation. \textit{Dual strand mappability} is defined as regions where a read mapping to
@@ -237,7 +238,7 @@
     the details won't be elaborated on here. However, I will highlight two small differences.
 
     The first is that Kundaje's tool used read start counts in their signal. In my implementation, I used read
-    coverage counts. Thus, in the normalization calculation, I had to multiply the total mapped read count by the read
+    coverage counts. Thus, to obtain an expected fragment count track, I had to multiply the total mapped read count by the read
     length, as such:
     \begin{equation}
       \label{eq:3}
@@ -251,29 +252,15 @@
     we simplify this further and just use a simple windowed sum of length 300.
 
   \section{Results}
+  One key result that I am unable to definitively speak on is efficiency. Although both GenMap and WiggleTools are more
+  efficient than their counterparts in theory, I was unable to run practical experiments comparing the two. The main
+  reason was that both of them had preset configurations or requirements that I was not able to establish on the
+  EMBL-EBI cluster system. For Umap, I was unable to switch it from using the SunGrid Engine to using LSF, and I
+  was unable to download and install the MATLAB runtime environment to run align2rawsignal.
 
     \subsection{Fragment length estimation}
     Figure \ref{fig:1} shows three separate samples to show some preliminary results. Each one was run first with naive perason calculations,
     then with mappability masking, and finally with mappability masking \textit{and} removing the first max values.
-    \begin{figure}[htp]
-      \makebox[\textwidth][c]{
-      \includegraphics[width = .55\textwidth]{images/FragLength_Naive1}
-      \includegraphics[width = .55\textwidth]{images/FragLength_Naive2}
-      \includegraphics[width = .55\textwidth]{images/FragLength_Naive3}}
-
-      \makebox[\textwidth][c]{
-      \includegraphics[width = .55\textwidth]{images/FragLength_Mappability1}
-      \includegraphics[width = .55\textwidth]{images/FragLength_Mappability2}
-      \includegraphics[width = .55\textwidth]{images/FragLength_Mappability3}}
-
-      \makebox[\textwidth][c]{
-      \includegraphics[width = .55\textwidth]{images/FragLength_MapFilter1}
-      \includegraphics[width = .55\textwidth]{images/FragLength_MapFilter2}
-      \includegraphics[width = .55\textwidth]{images/FragLength_MapFilter3}}
-
-      \caption{Three samples processed naively (Row 1), using mappability to mask unmappable values (Row 2), and then using mappability and filtering the leftmost max values (Row 3). The max shift values are: (Row 1) 105, 106, 108, (Row 2) 191, 76, 76, (Row 3): 183, 187, 187}
-      \label{fig:1}
-    \end{figure}
 
     As you can see, the peak shifts significantly from the first row compared with rows 2 and 3. This is due to the
     biased introduced by mappability differences.
@@ -285,18 +272,12 @@
     shown in row 3.
 
     \subsection{Normalization}
-    \begin{figure}[htp]
-      \makebox[\textwidth][c]{\includegraphics[width = 1.65\textwidth]{images/Unmappable_regions.png}}
-
-      \caption{A comparison between Kundaje's align2rawsignal (track 1) and my reimplementation (track 2), with the mappability in this region displayed in track 3. Note align2rawsignal shows non-zero values in unmappable regions, despite claiming to discard signal in these regions.}
-      \label{fig:2}
-    \end{figure}
 
     The normalization results are difficult to display, as they are very large signal track files. The alternative
     assessment used was to generate various statistics on the sample files pre- and post-normalization, including
     area under the curve (AUC), covariance, mean value, and max value.
 
-    
+    % Include plots with statistics.
 
     One interesting note is that although my implementation
     was very similar to the implementation described in Michael Hoffman's paper \cite{hoffman_integrative_2013}, the
@@ -313,8 +294,70 @@
     the figure clearly displays a region of low/non-mappability where align2rawsignal fails to remove the signal. This
     could be why the AUC is so much higher in align2rawsignal.
 
+    However, despite the differences in the two signal tracks, the overall trends in both sample pools seems to be similar.
+
   \section{Conclusion}
+  In my three months at EMBL-EBI, under supervision of Dr. Daniel Zerbino, I worked on reimplementing the ENCODE ChIP-seq
+  normalization pipeline. This pipeline is a widely used series of tools meant to normalize raw ChIP-seq and other
+  epigenetic datasets from read coverage to normalized sequenced fragment counts. As a final result, I present my
+  reimplementation of the pipeline, primarily focused on using GenMap \cite{pockrandt_genmap:_2019} for the mappability
+  track generation, and WiggleTools \cite{zerbino_wiggletools:_2014} for the normalization calculations.
+
+  \section{Future work}
+  There are a number of things I would like to continue working on to present a more final product.
+
+  \begin{enumerate}
+    \item Establishing a set of rigorous and reliable tests. As I was unable to get Umap and align2rawsignal functioning,
+          I would like to work on getting them running so that I can test them against my current implementation.
+    \item Extending the pipeline to accept paired end input. Currently, it only functions on single end data. However,
+          the extension to paired end data is not too difficult to imagine. With paired end data, the entire fragment
+          length estimation can be skipped, as that information can be obtained from the distance between the paired
+          end reads. Then, the primary difference is in the normalization of the signal, where the mappability track
+          would be different, in order to account for the joint mappability of the primary and secondary reads.
+    \item Extending the pipeline to work with replicate samples. This is something that is currently possible in
+          align2rawsignal, but not yet possible in my implementation. However, it is fairly trivial to implement, as it
+          only affects the normalization step. It is, in essence, just an average of all of the intermediate signal
+          tracks generated by each replicate. For example, the expected signal formula would then look as such:
+          \begin{equation}
+            \label{eq:4}
+            E(x) = \frac{M_i(x)*R_i*RL_i}{G}
+          \end{equation}
+          And the final normalized signal as such:
+          \begin{equation}
+            \label{eq:5}
+            S(x) = \sum_{i \in Replicates}\left(\frac{F_i(x)}{E_i(x)}\right)
+          \end{equation}
+  \end{enumerate}
 
   \bibliography{FinalWriteUp}{}
   \bibliographystyle{plain}
+
+  \newpage
+  \section{Figures and Plots}
+
+  \begin{figure}[h!]
+    \makebox[\textwidth][c]{
+    \includegraphics[width = .55\textwidth]{images/FragLength_Naive1}
+    \includegraphics[width = .55\textwidth]{images/FragLength_Naive2}
+    \includegraphics[width = .55\textwidth]{images/FragLength_Naive3}}
+
+    \makebox[\textwidth][c]{
+    \includegraphics[width = .55\textwidth]{images/FragLength_Mappability1}
+    \includegraphics[width = .55\textwidth]{images/FragLength_Mappability2}
+    \includegraphics[width = .55\textwidth]{images/FragLength_Mappability3}}
+
+    \makebox[\textwidth][c]{
+    \includegraphics[width = .55\textwidth]{images/FragLength_MapFilter1}
+    \includegraphics[width = .55\textwidth]{images/FragLength_MapFilter2}
+    \includegraphics[width = .55\textwidth]{images/FragLength_MapFilter3}}
+    \caption{Three samples processed naively (Row 1), using mappability to mask unmappable values (Row 2), and then using mappability and filtering the leftmost max values (Row 3). The max shift values are: (Row 1) 105, 106, 108, (Row 2) 191, 76, 76, (Row 3): 183, 187, 187}
+    \label{fig:1}
+  \end{figure}
+
+  \begin{figure}[htp]
+    \makebox[\textwidth][c]{\includegraphics[width = 1.65\textwidth]{images/Unmappable_regions.png}}
+
+    \caption{A comparison between Kundaje's align2rawsignal (track 1) and my reimplementation (track 2), with the mappability in this region displayed in track 3. Note align2rawsignal shows non-zero values in unmappable regions, despite claiming to discard signal in these regions.}
+    \label{fig:2}
+  \end{figure}
 \end{document}
