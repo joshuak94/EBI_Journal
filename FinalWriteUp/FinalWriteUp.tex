@@ -2,6 +2,7 @@
 
 \usepackage{cite}
 \usepackage[hidelinks]{hyperref}
+\usepackage[numbib,nottoc]{tocbibind}
 \usepackage{amsmath}
 \usepackage{listings}
 \usepackage{xcolor}
@@ -35,7 +36,7 @@
 
 \lstset{style=mystyle}
 
-\title{Improving on the ENCODE ChIP-seq normalization pipeline}
+\title{Bleacher: An improved pipeline for ChIP-seq normalization}
 \author{Joshua Kim\thanks{joshua.kim@fu-berlin.de}\\EMBL-EBI Hinxton, UK}
 
 \begin{document}
@@ -52,7 +53,7 @@
   read coverage (denoted by a $0$ signal value), and regions which have no signal due because they lie in unmappable areas
   in the genome (denoted by a $NaN$ signal value). It additionally requires mappability tracks generated from a tool
   called Umap \cite{karimzadeh_umap_2018} which generates binary mappabilities for a given read length and reference genome. I was able to
-  create a more efficient pipeline, replacing Umap with GenMap \cite{pockrandt_genmap:_2019} and re-implementing align2rawsignal with
+  create a more efficient pipeline, called Bleacher, replacing Umap with GenMap \cite{pockrandt_genmap:_2019} and re-implementing align2rawsignal with
   WiggleTools \cite{zerbino_wiggletools:_2014}. In order to better understand the motivation behind this pipeline, I will first briefly explain the
   biological context, and then give an in depth analysis of the pre-existing pipeline before I show my results.
 
@@ -61,12 +62,12 @@
     \subsection{DNA, chromatin, and histone modifications}
     DNA is normally organized into beads, known as chromatin, around histone proteins in the nucleus. When in this form,
     regions of the DNA can become more or less transcriptionally available through processes known as histone modifications.
-    Acetylation and methylation (addition of acetyl and methyl groups resp.) are the most common forms of modifications, and
+    Acetylation and methylation (addition of acetyl resp. methyl groups) are the most common forms of modifications, and
     the combination of where the histone is modified and which group is added determines whether the DNA in that chromatin
     will be more or less active. In addition to histones, there are other proteins which can bind to the DNA and affect
-    gene transcription. One large family of these are known as transcription factors. Often, knowing where a transcription
-    factor binds is an important insight in gene regulation. This can be accomplished in a few ways, but the most common
-    is known as ChIP-seq, which combines chromatin immunoprecipitation with high throughput sequencing.
+    gene transcription. One large family of these is known as transcription factors. Often, knowing where a transcription
+    factor binds is an important insight into gene regulation. This can be accomplished in a few ways, but the most common
+    method is ChIP-seq, which combines \textbf{Ch}romatin \textbf{I}mmuno\textbf{P}recipitation with high throughput \textbf{seq}uencing.
     However, it is not always enough to know where a specific protein binds. One may wish to probe
     more generally at the DNA structure, looking for all accessible regions of the genome. This can be accomplished by
     techniques such as ATAC-seq and DNase-seq, which use different isolation methods to separate and sequence the open regions of DNA.
@@ -167,8 +168,8 @@
     number of reads and mappability. While nothing is inherently wrong with the tool, it is not as efficient as it could be,
     as it reimplements several things which already have efficient implementations, e.g., reading and writing to standard file formats.
 
-  \section{The New Pipeline}
-  In the new pipeline, Umap has been replaced by GenMap, and align2rawsignal has been re-written using Python3 and WiggleTools.
+  \section{Bleacher}
+  In Bleacher, Umap has been replaced by GenMap, and align2rawsignal has been re-written using Python3 and WiggleTools.
   This introduces several benefits, which are detailed below.
 
     \subsection{GenMap}
@@ -275,9 +276,8 @@
 
     The normalization results are difficult to display, as they are very large signal track files. The alternative
     assessment used was to generate various statistics on the sample files pre- and post-normalization, including
-    area under the curve (AUC), covariance, mean value, and max value.
-
-    % Include plots with statistics.
+    area under the curve (AUC), covariance, mean value, and max value. These results are visualized in Figures \ref{fig:3},
+    \ref{fig:4}, \ref{fig:5}, and \ref{fig:6}.
 
     One interesting note is that although my implementation
     was very similar to the implementation described in Michael Hoffman's paper \cite{hoffman_integrative_2013}, the
@@ -329,6 +329,9 @@
           \end{equation}
   \end{enumerate}
 
+  After these final additions, I expect it will be complete enough to present as a publicly available tool, under the
+  site https://github.com/joshuak94/Bleacher.
+
   \bibliography{FinalWriteUp}{}
   \bibliographystyle{plain}
 
@@ -359,5 +362,29 @@
 
     \caption{A comparison between Kundaje's align2rawsignal (track 1) and my reimplementation (track 2), with the mappability in this region displayed in track 3. Note align2rawsignal shows non-zero values in unmappable regions, despite claiming to discard signal in these regions.}
     \label{fig:2}
+  \end{figure}
+
+  \begin{figure}[htp]
+    \makebox[\textwidth][c]{\includegraphics[width = 1.65\textwidth]{images/auc_comparison}}
+    \caption{A comparison of the AUC values for five samples between the raw datasets, the datasets normalized with align2rawsignal, and then normalized with Bleacher.}
+    \label{fig:3}
+  \end{figure}
+
+  \begin{figure}[htp]
+    \makebox[\textwidth][c]{\includegraphics[width = 1.65\textwidth]{images/cv_comparison}}
+    \caption{A comparison of the CV values for five samples between the raw datasets, the datasets normalized with align2rawsignal, and then normalized with Bleacher.}
+    \label{fig:4}
+  \end{figure}
+
+  \begin{figure}[htp]
+    \makebox[\textwidth][c]{\includegraphics[width = 1.65\textwidth]{images/var_comparison}}
+    \caption{A comparison of the variance for five samples between the raw datasets, the datasets normalized with align2rawsignal, and then normalized with Bleacher.}
+    \label{fig:5}
+  \end{figure}
+
+  \begin{figure}[htp]
+    \makebox[\textwidth][c]{\includegraphics[width = 1.65\textwidth]{images/max_comparison}}
+    \caption{A comparison of the maximums for five samples between the raw datasets, the datasets normalized with align2rawsignal, and then normalized with Bleacher.}
+    \label{fig:6}
   \end{figure}
 \end{document}
